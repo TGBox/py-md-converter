@@ -9,12 +9,25 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 
 from mdconv import __version__
-from mdconv.engine import ConversionError, Options, collect_inputs, convert, supported_conversions
+from mdconv.engine import (
+    ConversionError,
+    Options,
+    collect_inputs,
+    convert,
+    supported_conversions,
+)
 from mdconv.tools import ToolMissingError
 
-try:
-    from tkinterdnd2 import DND_FILES, TkinterDnD
+HAS_DND = False
+DND_FILES = None
+TkinterDnD = None
 
+try:
+    import importlib
+
+    _dnd = importlib.import_module("tkinterdnd2")
+    DND_FILES = getattr(_dnd, "DND_FILES", None)
+    TkinterDnD = getattr(_dnd, "TkinterDnD", None)
     HAS_DND = True
 except ImportError:  # GUI funktioniert auch ohne, dann nur per Dateidialog
     HAS_DND = False
@@ -51,8 +64,14 @@ class App:
 
         files = ttk.LabelFrame(self.root, text="Eingabe")
         files.pack(fill="both", expand=True, **pad)
-        hint = "Dateien oder Ordner hierher ziehen" if HAS_DND else "Dateien oder Ordner hinzufügen"
-        ttk.Label(files, text=hint, foreground="gray").pack(anchor="w", padx=8, pady=(4, 0))
+        hint = (
+            "Dateien oder Ordner hierher ziehen"
+            if HAS_DND
+            else "Dateien oder Ordner hinzufügen"
+        )
+        ttk.Label(files, text=hint, foreground="gray").pack(
+            anchor="w", padx=8, pady=(4, 0)
+        )
 
         self.listbox = tk.Listbox(files, selectmode="extended", height=8)
         self.listbox.pack(fill="both", expand=True, padx=8, pady=4)
@@ -63,32 +82,61 @@ class App:
         bar = ttk.Frame(files)
         bar.pack(fill="x", padx=8, pady=(0, 6))
         ttk.Button(bar, text="Dateien…", command=self._add_files).pack(side="left")
-        ttk.Button(bar, text="Ordner…", command=self._add_folder).pack(side="left", padx=4)
-        ttk.Button(bar, text="Entfernen", command=self._remove_selected).pack(side="left")
+        ttk.Button(bar, text="Ordner…", command=self._add_folder).pack(
+            side="left", padx=4
+        )
+        ttk.Button(bar, text="Entfernen", command=self._remove_selected).pack(
+            side="left"
+        )
         ttk.Button(bar, text="Leeren", command=self._clear).pack(side="left", padx=4)
 
         opts = ttk.LabelFrame(self.root, text="Optionen")
         opts.pack(fill="x", **pad)
         opts.columnconfigure(1, weight=1)
 
-        ttk.Label(opts, text="Zielformat").grid(row=0, column=0, sticky="w", padx=8, pady=4)
-        ttk.Combobox(opts, textvariable=self.target, values=FORMATS, state="readonly",
-                     width=10).grid(row=0, column=1, sticky="w", pady=4)
+        ttk.Label(opts, text="Zielformat").grid(
+            row=0, column=0, sticky="w", padx=8, pady=4
+        )
+        ttk.Combobox(
+            opts, textvariable=self.target, values=FORMATS, state="readonly", width=10
+        ).grid(row=0, column=1, sticky="w", pady=4)
 
-        self._path_row(opts, 1, "Ausgabeordner", self.out_dir, self._pick_out_dir,
-                       "leer = neben der Quelldatei")
-        self._path_row(opts, 2, "Word-Vorlage", self.reference, self._pick_reference,
-                       "optional, nur für MD → DOCX")
+        self._path_row(
+            opts,
+            1,
+            "Ausgabeordner",
+            self.out_dir,
+            self._pick_out_dir,
+            "leer = neben der Quelldatei",
+        )
+        self._path_row(
+            opts,
+            2,
+            "Word-Vorlage",
+            self.reference,
+            self._pick_reference,
+            "optional, nur für MD → DOCX",
+        )
 
-        ttk.Label(opts, text="CSV-Trennzeichen").grid(row=3, column=0, sticky="w", padx=8, pady=4)
-        ttk.Combobox(opts, textvariable=self.delimiter, values=list(DELIMITERS),
-                     state="readonly", width=6).grid(row=3, column=1, sticky="w", pady=4)
+        ttk.Label(opts, text="CSV-Trennzeichen").grid(
+            row=3, column=0, sticky="w", padx=8, pady=4
+        )
+        ttk.Combobox(
+            opts,
+            textvariable=self.delimiter,
+            values=list(DELIMITERS),
+            state="readonly",
+            width=6,
+        ).grid(row=3, column=1, sticky="w", pady=4)
 
         checks = ttk.Frame(opts)
         checks.grid(row=4, column=0, columnspan=3, sticky="w", padx=8, pady=(2, 6))
-        ttk.Checkbutton(checks, text="Unterordner einbeziehen", variable=self.recursive).pack(side="left")
-        ttk.Checkbutton(checks, text="Vorhandene Dateien überschreiben",
-                        variable=self.overwrite).pack(side="left", padx=12)
+        ttk.Checkbutton(
+            checks, text="Unterordner einbeziehen", variable=self.recursive
+        ).pack(side="left")
+        ttk.Checkbutton(
+            checks, text="Vorhandene Dateien überschreiben", variable=self.overwrite
+        ).pack(side="left", padx=12)
 
         run = ttk.Frame(self.root)
         run.pack(fill="x", **pad)
@@ -108,10 +156,16 @@ class App:
         self.log.tag_configure("ok", foreground="#1b5e20")
 
     def _path_row(self, parent, row, label, var, command, hint) -> None:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=4)
+        ttk.Label(parent, text=label).grid(
+            row=row, column=0, sticky="w", padx=8, pady=4
+        )
         ttk.Entry(parent, textvariable=var).grid(row=row, column=1, sticky="ew", pady=4)
-        ttk.Button(parent, text="…", width=3, command=command).grid(row=row, column=2, padx=8)
-        ttk.Label(parent, text=hint, foreground="gray").grid(row=row, column=3, sticky="w", padx=(0, 8))
+        ttk.Button(parent, text="…", width=3, command=command).grid(
+            row=row, column=2, padx=8
+        )
+        ttk.Label(parent, text=hint, foreground="gray").grid(
+            row=row, column=3, sticky="w", padx=(0, 8)
+        )
 
     # ---------- Eingabe ----------
 
@@ -147,8 +201,9 @@ class App:
             self.out_dir.set(folder)
 
     def _pick_reference(self) -> None:
-        file = filedialog.askopenfilename(title="Word-Vorlage wählen",
-                                          filetypes=[("Word-Dokument", "*.docx")])
+        file = filedialog.askopenfilename(
+            title="Word-Vorlage wählen", filetypes=[("Word-Dokument", "*.docx")]
+        )
         if file:
             self.reference.set(file)
 
@@ -166,10 +221,15 @@ class App:
         target = self.target.get()
         files = collect_inputs(self.inputs, target, self.recursive.get())
         if not files:
-            self._write(f"Keine Dateien gefunden, die sich nach {target} konvertieren lassen.", "error")
+            self._write(
+                f"Keine Dateien gefunden, die sich nach {target} konvertieren lassen.",
+                "error",
+            )
             return
         options = Options(
-            reference_doc=Path(self.reference.get()) if self.reference.get().strip() else None,
+            reference_doc=Path(self.reference.get())
+            if self.reference.get().strip()
+            else None,
             csv_delimiter=DELIMITERS[self.delimiter.get()],
             overwrite=self.overwrite.get(),
         )
@@ -178,8 +238,9 @@ class App:
         self.button.configure(state="disabled")
         self.progress.configure(maximum=len(files), value=0)
         self._write(f"Starte: {len(files)} Datei(en) → {target}")
-        self.worker = threading.Thread(target=self._run, args=(files, target, out_dir, options),
-                                       daemon=True)
+        self.worker = threading.Thread(
+            target=self._run, args=(files, target, out_dir, options), daemon=True
+        )
         self.worker.start()
 
     def _run(self, files, target, out_dir, options) -> None:
@@ -187,11 +248,13 @@ class App:
         for src in files:
             try:
                 outs = convert(src, target, out_dir, options)
-                self.events.put(("ok", f"✓ {src.name} → {', '.join(o.name for o in outs)}"))
+                self.events.put(
+                    ("ok", f"✓ {src.name} → {', '.join(o.name for o in outs)}")
+                )
             except (ConversionError, ToolMissingError) as exc:
                 failed += 1
                 self.events.put(("error", f"✗ {src.name}: {exc}"))
-            except Exception as exc:  # unerwartet: trotzdem weitermachen
+            except Exception as exc:  # noqa: BLE001 # unerwartet: trotzdem weitermachen
                 failed += 1
                 self.events.put(("error", f"✗ {src.name}: unerwarteter Fehler: {exc}"))
             self.events.put(("step", None))
@@ -202,11 +265,15 @@ class App:
             while True:
                 kind, payload = self.events.get_nowait()
                 if kind == "step":
-                    self.progress["value"] += 1  # step() springt am Maximum auf 0 zurück
+                    self.progress["value"] += (
+                        1  # step() springt am Maximum auf 0 zurück
+                    )
                 elif kind == "done":
                     ok, total = payload
-                    self._write(f"Fertig: {ok} von {total} Dateien konvertiert.\n",
-                                "ok" if ok == total else "error")
+                    self._write(
+                        f"Fertig: {ok} von {total} Dateien konvertiert.\n",
+                        "ok" if ok == total else "error",
+                    )
                     self.button.configure(state="normal")
                 else:
                     self._write(str(payload), kind)

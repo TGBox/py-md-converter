@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "openpyxl>=3.1",
     "pypandoc-binary>=1.13",  # bringt pandoc mit
+    "pyside6>=6.12.0",
 ]
 
 [project.optional-dependencies]
@@ -15,12 +16,20 @@ pdf = ["docling>=2.0"]
 
 [project.scripts]
 mdconv = "mdconv.cli:main"
+main = "main:main"
 
 [project.gui-scripts]
-mdconv-gui = "mdconv.gui:main"
+mdconv-gui = "mdconv.ui.main_window:main"
+
+
 
 [dependency-groups]
-dev = ["pytest>=8", "pyinstaller>=6"]
+dev = [
+    "pytest>=8",
+    "pyinstaller>=6",
+    "ruff>=0.17",
+]
+
 
 [build-system]
 requires = ["hatchling"]
@@ -29,6 +38,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mdconv"]
 
+[tool.uv]
+link-mode = "copy"
+
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = [".", "src"]
 testpaths = ["tests"]
+

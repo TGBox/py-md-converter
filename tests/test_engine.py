@@ -87,7 +87,10 @@ def test_collect_inputs_filters_by_target(tmp_path):
     sub.mkdir()
     (sub / "c.md").write_text("x")
     assert [p.name for p in collect_inputs([tmp_path], "docx")] == ["a.md"]
-    assert [p.name for p in collect_inputs([tmp_path], "docx", recursive=True)] == ["a.md", "c.md"]
+    assert [p.name for p in collect_inputs([tmp_path], "docx", recursive=True)] == [
+        "a.md",
+        "c.md",
+    ]
     assert [p.name for p in collect_inputs([tmp_path], "md")] == ["b.docx"]
 
 
@@ -108,7 +111,9 @@ def test_md_html_roundtrip(md, tmp_path):
     assert "Support" in back.read_text(encoding="utf-8")
 
 
-@pytest.mark.skipif(importlib.util.find_spec("docling") is not None, reason="docling installiert")
+@pytest.mark.skipif(
+    importlib.util.find_spec("docling") is not None, reason="docling installiert"
+)
 def test_pdf_import_without_docling_gives_clear_message(tmp_path):
     pdf = tmp_path / "x.pdf"
     pdf.write_bytes(b"%PDF-1.4")

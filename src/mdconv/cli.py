@@ -7,7 +7,13 @@ import sys
 from pathlib import Path
 
 from mdconv import __version__
-from mdconv.engine import ConversionError, Options, collect_inputs, convert, supported_conversions
+from mdconv.engine import (
+    ConversionError,
+    Options,
+    collect_inputs,
+    convert,
+    supported_conversions,
+)
 from mdconv.tools import ToolMissingError
 
 FORMATS = sorted({f for pair in supported_conversions() for f in pair})
@@ -20,18 +26,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("inputs", nargs="*", type=Path, help="Dateien oder Ordner")
     p.add_argument("-t", "--to", choices=FORMATS, help="Zielformat")
-    p.add_argument("-o", "--out", type=Path, help="Ausgabeordner (Standard: neben der Quelle)")
-    p.add_argument("-r", "--recursive", action="store_true", help="Unterordner einbeziehen")
-    p.add_argument("--reference-doc", type=Path, help="Word-Vorlage für Formatvorlagen (MD → DOCX)")
-    p.add_argument("--csv-delimiter", default=",", help="Trennzeichen für CSV-Ausgabe (Standard: ,)")
-    p.add_argument("-f", "--overwrite", action="store_true", help="Vorhandene Dateien überschreiben")
-    p.add_argument("--formats", action="store_true", help="Unterstützte Konvertierungen anzeigen")
+    p.add_argument(
+        "-o", "--out", type=Path, help="Ausgabeordner (Standard: neben der Quelle)"
+    )
+    p.add_argument(
+        "-r", "--recursive", action="store_true", help="Unterordner einbeziehen"
+    )
+    p.add_argument(
+        "--reference-doc", type=Path, help="Word-Vorlage für Formatvorlagen (MD → DOCX)"
+    )
+    p.add_argument(
+        "--csv-delimiter",
+        default=",",
+        help="Trennzeichen für CSV-Ausgabe (Standard: ,)",
+    )
+    p.add_argument(
+        "-f",
+        "--overwrite",
+        action="store_true",
+        help="Vorhandene Dateien überschreiben",
+    )
+    p.add_argument(
+        "--formats", action="store_true", help="Unterstützte Konvertierungen anzeigen"
+    )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
-    for stream in (sys.stdout, sys.stderr):  # Umlaute/Pfeile auch bei umgeleiteter Ausgabe
+    for stream in (
+        sys.stdout,
+        sys.stderr,
+    ):  # Umlaute/Pfeile auch bei umgeleiteter Ausgabe
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
     parser = build_parser()

@@ -1,3 +1,3 @@
-from mdconv.gui import main
+from mdconv.ui.main_window import main
 
 main()

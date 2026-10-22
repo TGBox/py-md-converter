@@ -18,8 +18,7 @@ class Table:
 
 def _split_row(line: str) -> list[str]:
     line = line.strip()
-    if line.startswith("|"):
-        line = line[1:]
+    line = line.removeprefix("|")
     if line.endswith("|") and not line.endswith("\\|"):
         line = line[:-1]
     cells = re.split(r"(?<!\\)\|", line)
@@ -74,7 +73,10 @@ def to_markdown(rows: list[list[object]]) -> str:
     if not rows:
         return ""
     width = max(len(r) for r in rows)
-    text = [[cell_to_text(c).replace("|", "\\|").replace("\n", " ") for c in r] for r in rows]
+    text = [
+        [cell_to_text(c).replace("|", "\\|").replace("\n", " ") for c in r]
+        for r in rows
+    ]
     text = [r + [""] * (width - len(r)) for r in text]
     header, body = text[0], text[1:]
     out = ["| " + " | ".join(header) + " |", "|" + "|".join(["---"] * width) + "|"]
@@ -84,7 +86,7 @@ def to_markdown(rows: list[list[object]]) -> str:
 
 def trim(rows: list[list[object]]) -> list[list[object]]:
     """Entfernt leere Zeilen/Spalten am Ende."""
-    is_empty = lambda c: c is None or str(c).strip() == ""  # noqa: E731
+    is_empty = lambda c: c is None or str(c).strip() == ""
     rows = [list(r) for r in rows]
     while rows and all(is_empty(c) for c in rows[-1]):
         rows.pop()

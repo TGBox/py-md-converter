@@ -24,9 +24,11 @@ class Options:
 
 
 EXTENSIONS = {
-    ".md": "md", ".markdown": "md",
+    ".md": "md",
+    ".markdown": "md",
     ".docx": "docx",
-    ".html": "html", ".htm": "html",
+    ".html": "html",
+    ".htm": "html",
     ".pdf": "pdf",
     ".xlsx": "xlsx",
     ".csv": "csv",
@@ -40,6 +42,7 @@ def _register(src: str, dst: str):
     def deco(fn: Converter) -> Converter:
         _CONVERTERS[(src, dst)] = fn
         return fn
+
     return deco
 
 
@@ -52,6 +55,7 @@ def format_of(path: Path) -> str | None:
 
 
 # ---------- Pandoc ----------
+
 
 def _pandoc(*args: str, cwd: Path | None = None) -> None:
     run([find_tool("pandoc"), *args], cwd=cwd)
@@ -68,23 +72,45 @@ def _md_to_docx(src: Path, out: Path, opt: Options) -> list[Path]:
 
 @_register("md", "html")
 def _md_to_html(src: Path, out: Path, opt: Options) -> list[Path]:
-    _pandoc(str(src), "-o", str(out), "-s", "--embed-resources",
-            f"--resource-path={src.parent}", f"--metadata=pagetitle:{src.stem}")
+    _pandoc(
+        str(src),
+        "-o",
+        str(out),
+        "-s",
+        "--embed-resources",
+        f"--resource-path={src.parent}",
+        f"--metadata=pagetitle:{src.stem}",
+    )
     return [out]
 
 
 @_register("md", "pdf")
 def _md_to_pdf(src: Path, out: Path, opt: Options) -> list[Path]:
-    _pandoc(str(src), "-o", str(out), f"--pdf-engine={find_tool('typst')}",
-            f"--resource-path={src.parent}")
+    _pandoc(
+        str(src),
+        "-o",
+        str(out),
+        f"--pdf-engine={find_tool('typst')}",
+        f"--resource-path={src.parent}",
+    )
     return [out]
 
 
 def _to_markdown(src: Path, out: Path, fmt: str) -> list[Path]:
     # Bilder landen in <name>_media neben der Ausgabe, relativ verlinkt.
     media = f"{out.stem}_media"
-    _pandoc(str(src), "-f", fmt, "-t", "gfm", "--wrap=none",
-            f"--extract-media={media}", "-o", out.name, cwd=out.parent)
+    _pandoc(
+        str(src),
+        "-f",
+        fmt,
+        "-t",
+        "gfm",
+        "--wrap=none",
+        f"--extract-media={media}",
+        "-o",
+        out.name,
+        cwd=out.parent,
+    )
     return [out]
 
 
@@ -99,6 +125,7 @@ def _html_to_md(src: Path, out: Path, opt: Options) -> list[Path]:
 
 
 # ---------- Tabellen ----------
+
 
 def _read_tables(src: Path) -> list[tables.Table]:
     found = tables.parse_tables(src.read_text(encoding="utf-8-sig"))
@@ -142,7 +169,9 @@ def _md_to_xlsx(src: Path, out: Path, opt: Options) -> list[Path]:
             cell.font = Font(bold=True)
         for col in ws.columns:
             width = max(len(str(c.value or "")) for c in col)
-            ws.column_dimensions[col[0].column_letter].width = min(max(width + 2, 8), 60)
+            ws.column_dimensions[col[0].column_letter].width = min(
+                max(width + 2, 8), 60
+            )
     wb.save(out)
     return [out]
 
@@ -168,9 +197,14 @@ def _xlsx_to_md(src: Path, out: Path, opt: Options) -> list[Path]:
 def _md_to_csv(src: Path, out: Path, opt: Options) -> list[Path]:
     found = _read_tables(src)
     # Eine Tabelle -> <name>.csv, mehrere -> <name>_1.csv, <name>_2.csv, ...
-    targets = [out] if len(found) == 1 else [
-        out.with_name(f"{out.stem}_{i}{out.suffix}") for i in range(1, len(found) + 1)
-    ]
+    targets = (
+        [out]
+        if len(found) == 1
+        else [
+            out.with_name(f"{out.stem}_{i}{out.suffix}")
+            for i in range(1, len(found) + 1)
+        ]
+    )
     for table, target in zip(found, targets):
         _check_target(target, opt)
         with target.open("w", newline="", encoding="utf-8-sig") as f:
@@ -194,6 +228,7 @@ def _csv_to_md(src: Path, out: Path, opt: Options) -> list[Path]:
 
 # ---------- PDF -> MD (optional, Docling) ----------
 
+
 @_register("pdf", "md")
 def _pdf_to_md(src: Path, out: Path, opt: Options) -> list[Path]:
     try:
@@ -210,20 +245,26 @@ def _pdf_to_md(src: Path, out: Path, opt: Options) -> list[Path]:
 
 # ---------- Öffentliche API ----------
 
+
 def _check_target(target: Path, opt: Options) -> None:
     if target.exists() and not opt.overwrite:
-        raise ConversionError(f"Ziel existiert bereits: {target.name} (Überschreiben aktivieren)")
+        raise ConversionError(
+            f"Ziel existiert bereits: {target.name} (Überschreiben aktivieren)"
+        )
 
 
-def convert(src: Path, dst_fmt: str, out_dir: Path | None = None,
-            options: Options | None = None) -> list[Path]:
+def convert(
+    src: Path, dst_fmt: str, out_dir: Path | None = None, options: Options | None = None
+) -> list[Path]:
     """Konvertiert eine Datei und gibt die erzeugten Dateien zurück."""
     opt = options or Options()
     src = Path(src).resolve()
     src_fmt = format_of(src)
     converter = _CONVERTERS.get((src_fmt, dst_fmt))
     if converter is None:
-        raise ConversionError(f"{src_fmt or src.suffix} → {dst_fmt} wird nicht unterstützt.")
+        raise ConversionError(
+            f"{src_fmt or src.suffix} → {dst_fmt} wird nicht unterstützt."
+        )
     target_dir = Path(out_dir).resolve() if out_dir else src.parent
     target_dir.mkdir(parents=True, exist_ok=True)
     out = target_dir / f"{src.stem}.{dst_fmt}"
@@ -237,14 +278,19 @@ def convert(src: Path, dst_fmt: str, out_dir: Path | None = None,
         raise ConversionError(str(exc)) from exc
 
 
-def collect_inputs(paths: Iterable[Path], dst_fmt: str, recursive: bool = False) -> list[Path]:
+def collect_inputs(
+    paths: Iterable[Path], dst_fmt: str, recursive: bool = False
+) -> list[Path]:
     """Löst Dateien und Ordner in die konvertierbaren Einzeldateien auf."""
     files: list[Path] = []
     for p in map(Path, paths):
         if p.is_dir():
             pattern = p.rglob("*") if recursive else p.glob("*")
-            files += sorted(f for f in pattern if f.is_file()
-                            and (format_of(f), dst_fmt) in _CONVERTERS)
+            files += sorted(
+                f
+                for f in pattern
+                if f.is_file() and (format_of(f), dst_fmt) in _CONVERTERS
+            )
         else:
             files.append(p)
     return list(dict.fromkeys(files))

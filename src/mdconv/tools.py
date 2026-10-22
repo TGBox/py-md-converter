@@ -38,9 +38,13 @@ def find_tool(name: str) -> str:
             import pypandoc  # pypandoc_binary liefert pandoc mit
 
             path = pypandoc.get_pandoc_path()
-            if path and Path(path).is_file():
-                return path
-        except Exception:
+            if path:
+                p = Path(path)
+                if p.is_file():
+                    return str(p)
+                if p.with_suffix(".exe").is_file():
+                    return str(p.with_suffix(".exe"))
+        except Exception:  # noqa: BLE001, S110
             pass
 
     found = shutil.which(name)
@@ -59,6 +63,7 @@ def run(args: list[str], cwd: Path | None = None) -> None:
     proc = subprocess.run(
         args,
         cwd=cwd,
+        check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",

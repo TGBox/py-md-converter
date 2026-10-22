@@ -15,8 +15,9 @@ if ($LASTEXITCODE) { throw "uv sync fehlgeschlagen" }
 
 # Pandoc aus pypandoc-binary nach vendor\bin kopieren
 New-Item -ItemType Directory -Force vendor\bin | Out-Null
-$pandoc = uv run --no-sync python -c "import pypandoc; print(pypandoc.get_pandoc_path())"
+$pandoc = uv run --no-sync python -c "from pathlib import Path; import pypandoc; p = Path(pypandoc.get_pandoc_path()); print(p if p.is_file() else p.with_suffix('.exe'))"
 Copy-Item $pandoc vendor\bin\pandoc.exe -Force
+
 
 if (-not (Test-Path vendor\bin\typst.exe)) {
     Write-Warning "vendor\bin\typst.exe fehlt - MD -> PDF funktioniert in der EXE dann nicht."
