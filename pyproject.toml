@@ -1,0 +1,34 @@
+[project]
+name = "py-md-converter"
+version = "0.1.0"
+description = "Markdown <-> DOCX, HTML, PDF, XLSX, CSV als CLI und GUI"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openpyxl>=3.1",
+    "pypandoc-binary>=1.13",  # bringt pandoc mit
+]
+
+[project.optional-dependencies]
+gui = ["tkinterdnd2>=0.4"]
+pdf = ["docling>=2.0"]
+
+[project.scripts]
+mdconv = "mdconv.cli:main"
+
+[project.gui-scripts]
+mdconv-gui = "mdconv.gui:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pyinstaller>=6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mdconv"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
