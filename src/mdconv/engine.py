@@ -9,7 +9,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mdconv import tables
+from mdconv.combine import CombineOptions, combine_markdown_to_pdf
 from mdconv.tools import ToolMissingError, find_tool, run
+
+__all__ = [
+    "CombineOptions",
+    "ConversionError",
+    "Options",
+    "collect_inputs",
+    "combine_markdown_to_pdf",
+    "convert",
+    "format_of",
+    "supported_conversions",
+]
 
 
 class ConversionError(Exception):
@@ -232,7 +244,10 @@ def _csv_to_md(src: Path, out: Path, opt: Options) -> list[Path]:
 @_register("pdf", "md")
 def _pdf_to_md(src: Path, out: Path, opt: Options) -> list[Path]:
     try:
-        from docling.document_converter import DocumentConverter
+        import importlib
+
+        docling_dc = importlib.import_module("docling.document_converter")
+        DocumentConverter = docling_dc.DocumentConverter
     except ImportError:
         raise ConversionError(
             "Der PDF-Import ist in diesem Build nicht enthalten "

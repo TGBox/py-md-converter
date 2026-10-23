@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
+from mdconv.combine import CombineOptions, combine_markdown_to_pdf
 from mdconv.engine import ConversionError, Options, convert
 from mdconv.tools import ToolMissingError
 
@@ -31,21 +32,63 @@ class ConversionWorker(QObject):
         target_fmt: str,
         out_dir: Path | None,
         options: Options,
+        combine_mode: bool = False,
+        combine_options: CombineOptions | None = None,
+        combine_out_file: Path | None = None,
     ) -> None:
         super().__init__()
         self.files = files
         self.target_fmt = target_fmt
         self.out_dir = out_dir
         self.options = options
+        self.combine_mode = combine_mode
+        self.combine_options = combine_options
+        self.combine_out_file = combine_out_file
         self._is_cancelled = False
 
     def cancel(self) -> None:
         """Requests graceful cancellation of the current conversion batch."""
         self._is_cancelled = True
 
+    def _run_combine(self) -> None:
+        """Executes Markdown-to-PDF combination."""
+        total = len(self.files)
+        target_pdf = self.combine_out_file or (
+            (self.out_dir or self.files[0].parent) / "Dokumentation.pdf"
+        )
+        self.log_message.emit(
+            f"Kombiniere {total} Markdown-Datei(en) in '{target_pdf.name}' (mit Inhaltsverzeichnis)...",
+            "info",
+        )
+        self.progress_updated.emit(0, total)
+
+        if self._is_cancelled:
+            self.cancelled.emit(0, total)
+            return
+
+        try:
+            combine_opt = self.combine_options or CombineOptions()
+            combine_markdown_to_pdf(self.files, target_pdf, combine_opt)
+            for f in self.files:
+                self.file_finished.emit(str(f), True, "Kombiniert ✓", [str(target_pdf)])
+            self.progress_updated.emit(total, total)
+            msg = f"Erfolgreich: {total} Dateien zusammengeführt → {target_pdf}"
+            self.log_message.emit(msg, "success")
+            self.finished.emit(total, 0, total)
+        except Exception as exc:  # noqa: BLE001
+            err_msg = f"Fehler beim Kombinieren: {exc}"
+            self.log_message.emit(err_msg, "error")
+            for f in self.files:
+                self.file_finished.emit(str(f), False, str(exc), [])
+            self.finished.emit(0, total, total)
+
     def run(self) -> None:
         """Executes the conversion batch sequentially, reporting progress via signals."""
         self.started.emit()
+        if self.combine_mode:
+            self._run_combine()
+            return
+
         total = len(self.files)
         succeeded = 0
         failed = 0

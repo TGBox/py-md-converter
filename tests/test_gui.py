@@ -148,3 +148,80 @@ def test_main_window_lifecycle(qapp, tmp_path):
 
     # Test close event (settings saved)
     win.close()
+
+
+def test_file_table_reordering(qapp, tmp_path):
+    table = FileTableWidget()
+    f1 = tmp_path / "1.md"
+    f2 = tmp_path / "2.md"
+    f3 = tmp_path / "3.md"
+    for f in (f1, f2, f3):
+        f.write_text("# Test", encoding="utf-8")
+        table.add_path(f)
+
+    # Initial order: 1, 2, 3
+    assert [p.name for p in table.get_paths()] == ["1.md", "2.md", "3.md"]
+
+    # Select row 1 ("2.md") and move up
+    table.selectRow(1)
+    table.move_selected_up()
+    assert [p.name for p in table.get_paths()] == ["2.md", "1.md", "3.md"]
+
+    # Move down again
+    table.selectRow(0)
+    table.move_selected_down()
+    assert [p.name for p in table.get_paths()] == ["1.md", "2.md", "3.md"]
+
+
+def test_main_window_combine_mode(qapp, tmp_path):
+    win = MainWindow()
+
+    f1 = tmp_path / "intro.md"
+    f1.write_text("# Intro", encoding="utf-8")
+    f2 = tmp_path / "chapter.md"
+    f2.write_text("# Chapter", encoding="utf-8")
+    win._add_paths([f1, f2])
+
+    # Select PDF target
+    win.combo_target.setCurrentIndex(win.combo_target.findData("pdf"))
+    assert not win.chk_combine_pdf.isHidden()
+
+    # Toggle combine mode
+    win.chk_combine_pdf.setChecked(True)
+    assert not win.container_combine.isHidden()
+    assert "werden kombiniert" in win.lbl_compatible_count.text()
+    assert "kombiniertes PDF" in win.btn_convert.text()
+
+    # Change combine title
+    win.edit_combine_title.setText("Mein Handbuch")
+    assert win.edit_combine_title.text() == "Mein Handbuch"
+
+    win.close()
+
+
+def test_worker_combine_mode(qapp, tmp_path):
+    from mdconv.combine import CombineOptions
+
+    f1 = tmp_path / "01.md"
+    f1.write_text("# Erste Datei", encoding="utf-8")
+    f2 = tmp_path / "02.md"
+    f2.write_text("# Zweite Datei", encoding="utf-8")
+
+    out_pdf = tmp_path / "output.pdf"
+    worker = ConversionWorker(
+        files=[f1, f2],
+        target_fmt="pdf",
+        out_dir=tmp_path,
+        options=Options(),
+        combine_mode=True,
+        combine_options=CombineOptions(title="Test Kombi"),
+        combine_out_file=out_pdf,
+    )
+
+    finished_called = []
+    worker.finished.connect(lambda s, f, t: finished_called.append((s, f, t)))
+    worker.run()
+
+    assert len(finished_called) == 1
+    assert finished_called[0] == (2, 0, 2)
+    assert out_pdf.exists()

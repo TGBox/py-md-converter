@@ -196,10 +196,61 @@ class FileTableWidget(QTableWidget):
                 item.setText("Bereit")
                 item.setForeground(QColor("#7aa2f7"))
 
+    def _swap_rows(self, r1: int, r2: int) -> None:
+        """Swaps two rows in the internal paths list and the visual table."""
+        self._paths[r1], self._paths[r2] = self._paths[r2], self._paths[r1]
+        for col in range(self.columnCount()):
+            item1 = self.takeItem(r1, col)
+            item2 = self.takeItem(r2, col)
+            if item2:
+                self.setItem(r1, col, item2)
+            if item1:
+                self.setItem(r2, col, item1)
+
+    def move_selected_up(self) -> None:
+        """Moves selected rows one position upward."""
+        selected_rows = sorted({idx.row() for idx in self.selectedIndexes()})
+        if not selected_rows or selected_rows[0] == 0:
+            return
+        self.clearSelection()
+        new_selection = []
+        for r in selected_rows:
+            self._swap_rows(r, r - 1)
+            new_selection.append(r - 1)
+        for r in new_selection:
+            self.selectRow(r)
+
+    def move_selected_down(self) -> None:
+        """Moves selected rows one position downward."""
+        selected_rows = sorted(
+            {idx.row() for idx in self.selectedIndexes()}, reverse=True
+        )
+        if not selected_rows or selected_rows[0] >= self.rowCount() - 1:
+            return
+        self.clearSelection()
+        new_selection = []
+        for r in selected_rows:
+            self._swap_rows(r, r + 1)
+            new_selection.append(r + 1)
+        for r in new_selection:
+            self.selectRow(r)
+
     def _show_context_menu(self, pos: QPoint) -> None:
         menu = QMenu(self)
         sel = self.selectedIndexes()
         has_selection = bool(sel)
+
+        act_up = QAction("▲ Nach oben verschieben", self)
+        act_up.setEnabled(has_selection)
+        act_up.triggered.connect(self.move_selected_up)
+        menu.addAction(act_up)
+
+        act_down = QAction("▼ Nach unten verschieben", self)
+        act_down.setEnabled(has_selection)
+        act_down.triggered.connect(self.move_selected_down)
+        menu.addAction(act_down)
+
+        menu.addSeparator()
 
         act_remove = QAction("Auswahl entfernen", self)
         act_remove.setEnabled(has_selection)

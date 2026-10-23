@@ -26,12 +26,14 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
 from mdconv import __version__
+from mdconv.combine import CombineOptions, find_markdown_files
 from mdconv.engine import Options, collect_inputs
 from mdconv.ui.dialogs import (
     AboutDialog,
@@ -125,6 +127,16 @@ class MainWindow(QMainWindow):
         self.btn_remove.clicked.connect(self.file_table.remove_selected)
         file_actions_layout.addWidget(self.btn_remove)
 
+        self.btn_move_up = QPushButton("▲ Nach oben")
+        self.btn_move_up.setToolTip("Ausgewählte Einträge nach oben verschieben")
+        self.btn_move_up.clicked.connect(self.file_table.move_selected_up)
+        file_actions_layout.addWidget(self.btn_move_up)
+
+        self.btn_move_down = QPushButton("▼ Nach unten")
+        self.btn_move_down.setToolTip("Ausgewählte Einträge nach unten verschieben")
+        self.btn_move_down.clicked.connect(self.file_table.move_selected_down)
+        file_actions_layout.addWidget(self.btn_move_down)
+
         self.btn_clear = QPushButton("Alle leeren")
         self.btn_clear.setToolTip("Gesamte Dateiliste zurücksetzen")
         self.btn_clear.clicked.connect(self._on_clear_files)
@@ -144,7 +156,7 @@ class MainWindow(QMainWindow):
         options_layout = QVBoxLayout(options_group)
         options_layout.setSpacing(8)
 
-        # Row 1: Target Format & Info
+        # Row 1: Target Format & Combine Checkbox
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Zielformat:"))
         self.combo_target = QComboBox()
@@ -153,6 +165,19 @@ class MainWindow(QMainWindow):
         self.combo_target.currentIndexChanged.connect(self._on_target_format_changed)
         row1.addWidget(self.combo_target)
 
+        self.chk_combine_pdf = QCheckBox(
+            "Markdown-Dateien zu einem PDF kombinieren (mit Inhaltsverzeichnis)"
+        )
+        self.chk_combine_pdf.setStyleSheet(
+            "font-weight: 600; color: #7aa2f7; margin-left: 15px;"
+        )
+        self.chk_combine_pdf.setToolTip(
+            "Führt alle Markdown-Dateien in ein einziges strukturiertes PDF-Dokument "
+            "mit klickbarem Inhaltsverzeichnis am Anfang zusammen."
+        )
+        self.chk_combine_pdf.toggled.connect(self._on_combine_toggled)
+        row1.addWidget(self.chk_combine_pdf)
+
         self.lbl_compatible_count = QLabel("")
         self.lbl_compatible_count.setStyleSheet(
             "color: #10b981; font-weight: 600; margin-left: 10px;"
@@ -160,6 +185,41 @@ class MainWindow(QMainWindow):
         row1.addWidget(self.lbl_compatible_count)
         row1.addStretch()
         options_layout.addLayout(row1)
+
+        # Row 1b: PDF Combine Detail Options (Title, TOC-Depth, Numbering, Pagebreak)
+        self.container_combine = QWidget()
+        combine_layout = QHBoxLayout(self.container_combine)
+        combine_layout.setContentsMargins(0, 2, 0, 2)
+        combine_layout.setSpacing(10)
+
+        combine_layout.addWidget(QLabel("Dokumenttitel:"))
+        self.edit_combine_title = QLineEdit("Dokumentation")
+        self.edit_combine_title.setPlaceholderText(
+            "Titel für Deckblatt & Inhaltsverzeichnis"
+        )
+        self.edit_combine_title.setMaximumWidth(220)
+        combine_layout.addWidget(self.edit_combine_title)
+
+        combine_layout.addWidget(QLabel("TOC-Tiefe:"))
+        self.spin_toc_depth = QSpinBox()
+        self.spin_toc_depth.setRange(1, 5)
+        self.spin_toc_depth.setValue(3)
+        self.spin_toc_depth.setToolTip(
+            "Gliederungstiefe des Inhaltsverzeichnisses (Ebenen 1 bis 5)"
+        )
+        combine_layout.addWidget(self.spin_toc_depth)
+
+        self.chk_combine_numbering = QCheckBox("Kapitel nummerieren (1, 1.1)")
+        self.chk_combine_numbering.setChecked(True)
+        combine_layout.addWidget(self.chk_combine_numbering)
+
+        self.chk_combine_pagebreak = QCheckBox("Seitenumbruch je Datei")
+        self.chk_combine_pagebreak.setChecked(True)
+        combine_layout.addWidget(self.chk_combine_pagebreak)
+
+        combine_layout.addStretch()
+        self.container_combine.setVisible(False)
+        options_layout.addWidget(self.container_combine)
 
         # Row 2: Output Directory
         row2 = QHBoxLayout()
@@ -421,6 +481,13 @@ class MainWindow(QMainWindow):
         if file_path:
             self.edit_reference.setText(file_path)
 
+    def _on_combine_toggled(self, checked: bool) -> None:
+        self.container_combine.setVisible(checked)
+        self.btn_convert.setText(
+            "▶  Als kombiniertes PDF erstellen" if checked else "▶  Jetzt Konvertieren"
+        )
+        self._update_compatible_count()
+
     def _on_target_format_changed(self) -> None:
         target_fmt = self.combo_target.currentData()
         is_docx = target_fmt == "docx"
@@ -432,6 +499,14 @@ class MainWindow(QMainWindow):
         self.lbl_delimiter.setEnabled(is_csv)
         self.combo_delimiter.setEnabled(is_csv)
 
+        is_pdf = target_fmt == "pdf"
+        self.chk_combine_pdf.setVisible(is_pdf)
+        self.container_combine.setVisible(is_pdf and self.chk_combine_pdf.isChecked())
+        if not is_pdf:
+            self.btn_convert.setText("▶  Jetzt Konvertieren")
+        elif self.chk_combine_pdf.isChecked():
+            self.btn_convert.setText("▶  Als kombiniertes PDF erstellen")
+
         self._update_compatible_count()
 
     def _update_compatible_count(self) -> None:
@@ -439,6 +514,26 @@ class MainWindow(QMainWindow):
         paths = self.file_table.get_paths()
         if not paths:
             self.lbl_compatible_count.setText("")
+            return
+
+        if target_fmt == "pdf" and self.chk_combine_pdf.isChecked():
+            recursive = self.chk_recursive.isChecked()
+            md_files = find_markdown_files(paths, recursive=recursive)
+            count = len(md_files)
+            if count == 0:
+                self.lbl_compatible_count.setText(
+                    "⚠ Keine Markdown-Dateien zum Kombinieren"
+                )
+                self.lbl_compatible_count.setStyleSheet(
+                    "color: #ef4444; font-weight: 600; margin-left: 10px;"
+                )
+            else:
+                self.lbl_compatible_count.setText(
+                    f"✓ {count} Markdown-Datei(en) werden kombiniert"
+                )
+                self.lbl_compatible_count.setStyleSheet(
+                    "color: #10b981; font-weight: 600; margin-left: 10px;"
+                )
             return
 
         resolved_files = collect_inputs(
@@ -472,31 +567,72 @@ class MainWindow(QMainWindow):
 
         target_fmt = self.combo_target.currentData()
         recursive = self.chk_recursive.isChecked()
-        resolved_files = collect_inputs(paths, target_fmt, recursive)
-
-        if not resolved_files:
-            msg = f"Keine konvertierbaren Dateien für das Zielformat '{target_fmt.upper()}' gefunden."
-            self.log_widget.append_message(msg, "warning")
-            QMessageBox.warning(self, "Keine kompatiblen Dateien", msg)
-            return
+        is_combine = target_fmt == "pdf" and self.chk_combine_pdf.isChecked()
 
         out_dir_text = self.edit_out_dir.text().strip()
         out_dir = Path(out_dir_text) if out_dir_text else None
-
-        ref_doc_text = self.edit_reference.text().strip()
-        ref_doc = Path(ref_doc_text) if ref_doc_text else None
-
-        delimiter = self.combo_delimiter.currentData() or ","
         overwrite = self.chk_overwrite.isChecked()
 
-        options = Options(
-            reference_doc=ref_doc,
-            csv_delimiter=delimiter,
-            overwrite=overwrite,
-        )
+        if is_combine:
+            resolved_files: list[Path] = []
+            for p in paths:
+                if p.is_file() and p.suffix.lower() in {".md", ".markdown"}:
+                    if p not in resolved_files:
+                        resolved_files.append(p)
+                elif p.is_dir():
+                    for f in find_markdown_files([p], recursive=recursive):
+                        if f not in resolved_files:
+                            resolved_files.append(f)
+
+            if not resolved_files:
+                msg = "Keine Markdown-Dateien zum Kombinieren gefunden."
+                self.log_widget.append_message(msg, "warning")
+                QMessageBox.warning(self, "Keine Markdown-Dateien", msg)
+                return
+
+            doc_title = self.edit_combine_title.text().strip() or "Dokumentation"
+            if out_dir_text:
+                candidate = Path(out_dir_text)
+                if candidate.suffix.lower() == ".pdf":
+                    target_pdf = candidate
+                else:
+                    target_pdf = candidate / f"{doc_title}.pdf"
+            else:
+                target_pdf = resolved_files[0].parent / f"{doc_title}.pdf"
+
+            combine_options = CombineOptions(
+                title=doc_title,
+                toc=True,
+                toc_depth=self.spin_toc_depth.value(),
+                pagebreaks=self.chk_combine_pagebreak.isChecked(),
+                number_sections=self.chk_combine_numbering.isChecked(),
+                overwrite=overwrite,
+            )
+            worker_files = resolved_files
+            options = Options(overwrite=overwrite)
+        else:
+            resolved_files = collect_inputs(paths, target_fmt, recursive)
+            if not resolved_files:
+                msg = f"Keine konvertierbaren Dateien für das Zielformat '{target_fmt.upper()}' gefunden."
+                self.log_widget.append_message(msg, "warning")
+                QMessageBox.warning(self, "Keine kompatiblen Dateien", msg)
+                return
+
+            ref_doc_text = self.edit_reference.text().strip()
+            ref_doc = Path(ref_doc_text) if ref_doc_text else None
+            delimiter = self.combo_delimiter.currentData() or ","
+
+            options = Options(
+                reference_doc=ref_doc,
+                csv_delimiter=delimiter,
+                overwrite=overwrite,
+            )
+            combine_options = None
+            target_pdf = None
+            worker_files = resolved_files
 
         self.file_table.reset_statuses()
-        self.progress_bar.setRange(0, len(resolved_files))
+        self.progress_bar.setRange(0, len(worker_files))
         self.progress_bar.setValue(0)
 
         # UI State during processing
@@ -506,14 +642,19 @@ class MainWindow(QMainWindow):
         self.btn_add_folder.setEnabled(False)
         self.btn_remove.setEnabled(False)
         self.btn_clear.setEnabled(False)
+        self.btn_move_up.setEnabled(False)
+        self.btn_move_down.setEnabled(False)
 
         # Spawn QThread
         self.worker_thread = QThread(self)
         self.current_worker = ConversionWorker(
-            files=resolved_files,
+            files=worker_files,
             target_fmt=target_fmt,
             out_dir=out_dir,
             options=options,
+            combine_mode=is_combine,
+            combine_options=combine_options,
+            combine_out_file=target_pdf,
         )
         self.current_worker.moveToThread(self.worker_thread)
 
@@ -573,6 +714,8 @@ class MainWindow(QMainWindow):
         self.btn_add_folder.setEnabled(True)
         self.btn_remove.setEnabled(True)
         self.btn_clear.setEnabled(True)
+        self.btn_move_up.setEnabled(True)
+        self.btn_move_down.setEnabled(True)
 
         self.current_worker = None
         self.worker_thread = None
@@ -637,6 +780,19 @@ class MainWindow(QMainWindow):
         self.chk_overwrite.setChecked(
             self.settings.value("overwrite", False, type=bool)
         )
+        self.chk_combine_pdf.setChecked(
+            self.settings.value("combine_pdf", False, type=bool)
+        )
+        self.edit_combine_title.setText(
+            self.settings.value("combine_title", "Dokumentation")
+        )
+        self.spin_toc_depth.setValue(self.settings.value("toc_depth", 3, type=int))
+        self.chk_combine_numbering.setChecked(
+            self.settings.value("combine_numbering", True, type=bool)
+        )
+        self.chk_combine_pagebreak.setChecked(
+            self.settings.value("combine_pagebreak", True, type=bool)
+        )
 
     def closeEvent(self, event) -> None:
         """Saves window geometry and settings before exiting."""
@@ -663,6 +819,15 @@ class MainWindow(QMainWindow):
         self.settings.setValue("target_format", self.combo_target.currentData())
         self.settings.setValue("recursive", self.chk_recursive.isChecked())
         self.settings.setValue("overwrite", self.chk_overwrite.isChecked())
+        self.settings.setValue("combine_pdf", self.chk_combine_pdf.isChecked())
+        self.settings.setValue("combine_title", self.edit_combine_title.text())
+        self.settings.setValue("toc_depth", self.spin_toc_depth.value())
+        self.settings.setValue(
+            "combine_numbering", self.chk_combine_numbering.isChecked()
+        )
+        self.settings.setValue(
+            "combine_pagebreak", self.chk_combine_pagebreak.isChecked()
+        )
         super().closeEvent(event)
 
 

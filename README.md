@@ -3,9 +3,10 @@
 Konvertiert Markdown in DOCX, HTML, PDF, XLSX und CSV – und zurück. Als Konsolenprogramm (`mdconv`) und als Fenster-Anwendung mit Drag & Drop (`mdconv-gui`).
 
 | Von | Nach | Technik |
-|---|---|---|
+| --- | --- | --- |
 | MD | DOCX, HTML | Pandoc |
 | MD | PDF | Pandoc + Typst |
+| MD (Ordner/Stapel) | Großes PDF mit Inhaltsverzeichnis | Pandoc + Typst (`--combine`) |
 | DOCX, HTML | MD (GFM) | Pandoc, Bilder nach `<name>_media/` |
 | MD-Tabellen | XLSX (ein Sheet je Tabelle), CSV (eine Datei je Tabelle) | eigene Logik + openpyxl |
 | XLSX, CSV | MD-Tabellen | eigene Logik, CSV-Trennzeichen wird erkannt |
@@ -18,7 +19,7 @@ uv sync --extra gui            # Pandoc kommt über pypandoc-binary mit
 uv sync --extra gui --extra pdf  # zusätzlich PDF -> MD (lädt PyTorch, groß)
 ```
 
-Für **MD → PDF** wird `typst` benötigt: `typst.exe` von <https://github.com/typst/typst/releases> nach `vendor\bin\` legen (oder in den PATH).
+Für **MD → PDF** wird `typst` benötigt: `typst.exe` von <https://github.com/typst/typst/releases> nach `vendor\bin\` legen (liegt bei Entwicklungsinstallation bereits vor, oder in den PATH).
 
 ## Konsole
 
@@ -29,6 +30,10 @@ uv run mdconv .\docs --to docx --reference-doc vorlage.docx
 uv run mdconv tabellen.md --to csv --csv-delimiter ";"
 uv run mdconv .\import --to md                         # alle DOCX/HTML/PDF/XLSX/CSV
 uv run mdconv --formats                                # unterstützte Konvertierungen
+
+# Markdown-Dateien aus Ordnerstruktur in ein großes PDF mit Inhaltsverzeichnis kombinieren:
+uv run mdconv .\docs --combine -o Handbuch.pdf --title "Gesamtdokumentation"
+uv run mdconv .\docs --combine -r --number-sections --toc-depth 3 -o Handbuch.pdf
 ```
 
 Vorhandene Zieldateien werden nicht überschrieben, außer mit `-f/--overwrite`. Exit-Code 1, sobald eine Datei fehlschlägt.
@@ -39,7 +44,10 @@ Vorhandene Zieldateien werden nicht überschrieben, außer mit `-f/--overwrite`.
 uv run mdconv-gui
 ```
 
-Dateien oder Ordner in die Liste ziehen, Zielformat wählen, *Konvertieren*. Ohne `tkinterdnd2` funktioniert die GUI ebenfalls, dann über die Schaltflächen *Dateien…*/*Ordner…*.
+- **Dateien konvertieren**: Dateien oder Ordner per Drag & Drop in die Liste ziehen, Zielformat wählen, *Jetzt Konvertieren*.
+- **In ein großes PDF kombinieren**: Bei Zielformat `PDF` die Option *Markdown-Dateien zu einem PDF kombinieren (mit Inhaltsverzeichnis)* aktivieren. Dokumenttitel, Gliederungstiefe und Nummerierung nach Wunsch anpassen.
+- **Reihenfolge anpassen**: Mit den Schaltflächen *▲ Nach oben* und *▼ Nach unten* (oder per Kontextmenü) lässt sich die Reihenfolge der Kapitel vor dem Zusammenführen frei bestimmen.
+- Das erzeugte PDF besitzt am Anfang ein voll klickbares Inhaltsverzeichnis sowie native PDF-Lesezeichen, über die man direkt zu den jeweiligen Dateien und Kapiteln springt.
 
 ## EXE bauen (Windows)
 
