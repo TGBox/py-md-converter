@@ -33,7 +33,12 @@ from PySide6.QtWidgets import (
 )
 
 from mdconv import __version__
-from mdconv.combine import CombineOptions, find_markdown_files, natural_sort_key
+from mdconv.combine import (
+    CombineOptions,
+    find_combinable_files,
+    is_combinable_file,
+    natural_sort_key,
+)
 from mdconv.engine import Options, collect_inputs, format_of
 from mdconv.ui.dialogs import (
     AboutDialog,
@@ -166,14 +171,14 @@ class MainWindow(QMainWindow):
         row1.addWidget(self.combo_target)
 
         self.chk_combine_pdf = QCheckBox(
-            "Markdown-Dateien zu einem PDF kombinieren (mit Inhaltsverzeichnis)"
+            "Dateien zu einem PDF kombinieren (mit Inhaltsverzeichnis)"
         )
         self.chk_combine_pdf.setStyleSheet(
             "font-weight: 600; color: #7aa2f7; margin-left: 15px;"
         )
         self.chk_combine_pdf.setToolTip(
-            "Führt alle Markdown-Dateien in ein einziges strukturiertes PDF-Dokument "
-            "mit klickbarem Inhaltsverzeichnis am Anfang zusammen."
+            "Führt alle Dokument- und Textdateien (.md, .docx, .html, .xlsx, .csv, .pdf, .txt etc.) "
+            "in ein einziges strukturiertes PDF-Dokument mit klickbarem Inhaltsverzeichnis am Anfang zusammen."
         )
         self.chk_combine_pdf.toggled.connect(self._on_combine_toggled)
         row1.addWidget(self.chk_combine_pdf)
@@ -427,9 +432,9 @@ class MainWindow(QMainWindow):
     def _on_add_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Dateien zur Konvertierung wählen",
+            "Dateien zur Konvertierung oder Kombination wählen",
             "",
-            "Alle unterstützten Formate (*.md *.markdown *.docx *.html *.htm *.pdf *.xlsx *.csv);;Alle Dateien (*.*)",
+            "Alle unterstützten Formate (*.md *.markdown *.docx *.html *.htm *.pdf *.xlsx *.csv *.txt *.json *.yaml *.yml *.py);;Alle Dateien (*.*)",
         )
         if files:
             self._add_paths([Path(f) for f in files])
@@ -449,11 +454,12 @@ class MainWindow(QMainWindow):
         for raw in paths:
             p = Path(raw).resolve()
             if p.is_dir():
-                # Always recursively discover all supported files in the folder and its subdirectories
+                # Always recursively discover all supported/combinable files in the folder and its subdirectories
                 folder_files = [
                     f.resolve()
                     for f in p.rglob("*")
-                    if f.is_file() and format_of(f) is not None
+                    if f.is_file()
+                    and (format_of(f) is not None or is_combinable_file(f))
                 ]
                 folder_files.sort(key=natural_sort_key)
                 if folder_files:
@@ -550,18 +556,23 @@ class MainWindow(QMainWindow):
 
         if target_fmt == "pdf" and self.chk_combine_pdf.isChecked():
             # In combine mode, always search recursively through folder structures
-            md_files = find_markdown_files(paths, recursive=True)
-            count = len(md_files)
+            combinable_files = find_combinable_files(paths, recursive=True)
+            count = len(combinable_files)
             if count == 0:
                 self.lbl_compatible_count.setText(
-                    "⚠ Keine Markdown-Dateien zum Kombinieren"
+                    "⚠ Keine kompatiblen Dateien zum Kombinieren"
                 )
                 self.lbl_compatible_count.setStyleSheet(
                     "color: #ef4444; font-weight: 600; margin-left: 10px;"
                 )
             else:
+                has_non_md = any(
+                    f.suffix.lower() not in {".md", ".markdown"}
+                    for f in combinable_files
+                )
+                label_type = "Datei(en)" if has_non_md else "Markdown-Datei(en)"
                 self.lbl_compatible_count.setText(
-                    f"✓ {count} Markdown-Datei(en) werden kombiniert"
+                    f"✓ {count} {label_type} werden kombiniert"
                 )
                 self.lbl_compatible_count.setStyleSheet(
                     "color: #10b981; font-weight: 600; margin-left: 10px;"
@@ -608,18 +619,18 @@ class MainWindow(QMainWindow):
         if is_combine:
             resolved_files: list[Path] = []
             for p in paths:
-                if p.is_file() and p.suffix.lower() in {".md", ".markdown"}:
+                if is_combinable_file(p):
                     if p not in resolved_files:
                         resolved_files.append(p)
                 elif p.is_dir():
-                    for f in find_markdown_files([p], recursive=True):
+                    for f in find_combinable_files([p], recursive=True):
                         if f not in resolved_files:
                             resolved_files.append(f)
 
             if not resolved_files:
-                msg = "Keine Markdown-Dateien zum Kombinieren gefunden."
+                msg = "Keine kompatiblen Dateien zum Kombinieren gefunden."
                 self.log_widget.append_message(msg, "warning")
-                QMessageBox.warning(self, "Keine Markdown-Dateien", msg)
+                QMessageBox.warning(self, "Keine Dateien", msg)
                 return
 
             doc_title = self.edit_combine_title.text().strip() or "Dokumentation"

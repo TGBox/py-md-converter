@@ -57,7 +57,7 @@ def find_tool(name: str) -> str:
     )
 
 
-def run(args: list[str], cwd: Path | None = None) -> None:
+def run(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     """Startet ein Werkzeug ohne Konsolenfenster und wirft bei Fehlern."""
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     proc = subprocess.run(
@@ -73,3 +73,4 @@ def run(args: list[str], cwd: Path | None = None) -> None:
     if proc.returncode != 0:
         msg = (proc.stderr or proc.stdout).strip() or f"Exit-Code {proc.returncode}"
         raise RuntimeError(msg)
+    return proc

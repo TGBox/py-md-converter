@@ -142,3 +142,154 @@ def test_combine_markdown_to_pdf_with_toc_and_bookmarks(tmp_path: Path):
     assert toc_links_count >= 3  # Links to the chapters
 
     doc.close()
+
+
+def test_sanitize_typst_content(tmp_path: Path):
+    from mdconv.combine import sanitize_typst_content
+
+    existing_img = tmp_path / "valid.png"
+    existing_img.touch()
+
+    typ_input = (
+        '#box(image("https://example.com/logo.png"))\n'
+        '#figure(image("missing.png"), caption: [Missing])\n'
+        '#figure(image("valid.png"), caption: [Valid])\n'
+    )
+
+    sanitized = sanitize_typst_content(typ_input, common_root=tmp_path)
+    assert 'link("https://example.com/logo.png")' in sanitized
+    assert "Bild nicht gefunden: missing.png" in sanitized
+    assert 'image("valid.png")' in sanitized
+
+
+def test_combine_with_remote_and_missing_images(tmp_path: Path):
+    """Ensure remote images and missing local images do not crash PDF compilation."""
+    f1 = tmp_path / "01_readme.md"
+    f1.write_text(
+        "# Projekt mit Bildern\n\n"
+        "Ein lokales Bild das fehlt:\n\n"
+        "![Missing local](images/does_not_exist.png)\n\n"
+        "Ein Online-Badge / Bild:\n\n"
+        "![Remote Badge](https://user-images.githubusercontent.com/5280692/170442888-f64c2a1b-c99d-46fa-8e76-210706b484b0.png)\n\n"
+        "Ein nicht erreichbares Online-Bild:\n\n"
+        "![Unreachable](https://httpbin.org/status/404)\n",
+        encoding="utf-8",
+    )
+
+    out_pdf = tmp_path / "combined_resilient.pdf"
+    res = combine_markdown_to_pdf([f1], out_pdf, CombineOptions(title="Resilienz-Test"))
+    assert res.exists()
+    assert res.stat().st_size > 500
+
+
+def test_combine_multiple_file_types(tmp_path: Path):
+    """Test combining various formats (MD, TXT, CSV, XLSX, JSON, PY, PNG) into a single PDF."""
+    from openpyxl import Workbook
+
+    from mdconv.combine import find_combinable_files
+
+    docs = tmp_path / "mixed_docs"
+    docs.mkdir()
+
+    # 1. Markdown
+    (docs / "01_intro.md").write_text(
+        "# Projektübersicht\n\nDas ist die Einleitung.", encoding="utf-8"
+    )
+
+    # 2. Text file
+    (docs / "02_notes.txt").write_text(
+        "Wichtige Notizen zum Projektverlauf.", encoding="utf-8"
+    )
+
+    # 3. CSV
+    (docs / "03_data.csv").write_text(
+        "ID,Name,Status\n1,Alpha,Aktiv\n2,Beta,Geplant\n", encoding="utf-8"
+    )
+
+    # 4. XLSX
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Kennzahlen"
+    ws.append(["Metrik", "Wert"])
+    ws.append(["Umsatz", 150000])
+    wb.save(docs / "04_metrics.xlsx")
+
+    # 5. JSON code/config
+    (docs / "05_config.json").write_text(
+        '{\n  "version": "1.0",\n  "enabled": true\n}\n', encoding="utf-8"
+    )
+
+    # 6. Python script
+    (docs / "06_script.py").write_text(
+        'def run():\n    print("System aktiv")\n', encoding="utf-8"
+    )
+
+    # 7. Image
+    img_path = docs / "07_schema.png"
+    q_img = QImage(30, 30, QImage.Format.Format_RGB32)
+    q_img.fill(0x0000FF)
+    q_img.save(str(img_path))
+
+    # Discover combinable files
+    files = find_combinable_files([docs], recursive=True)
+    assert len(files) == 7
+
+    out_pdf = tmp_path / "gesamt_dokumentation.pdf"
+    opt = CombineOptions(title="Gesamthandbuch", toc=True, toc_depth=3)
+    res = combine_markdown_to_pdf(files, out_pdf, opt)
+
+    assert res.exists()
+    assert res.stat().st_size > 1000
+
+    doc = QPdfDocument()
+    doc.load(str(res))
+    assert doc.pageCount() >= 5
+
+    # Check outline bookmarks
+    model = QPdfBookmarkModel()
+    model.setDocument(doc)
+    assert model.rowCount() >= 6
+    doc.close()
+
+
+def test_combine_with_scoped_packages_and_anchor_links(tmp_path: Path):
+    """Ensure npm scoped package mentions (@foo/bar) and GitHub/GitLab anchor links compile smoothly."""
+    f1 = tmp_path / "01_gitlab_readme.md"
+    f1.write_text(
+        "# @data-al/design-system\n\n"
+        "Paket installieren:\n\n"
+        "- npm install @data-al/design-system\n"
+        "- Plugin: [Vite Plugin](https://github.com) [@vitejs/plugin-react]\n\n"
+        "Inhaltsverzeichnis:\n"
+        "- [Installation & Setup](#installation--setup)\n"
+        "- [1. Enqueue tables](#1-enqueue-tables)\n"
+        "- [Accounts & workspaces](#accounts--workspaces)\n"
+        "- [Dead link to nowhere](#unknown-heading-nowhere)\n\n"
+        "# Installation & Setup\n\n"
+        "Hier steht die Installation.\n\n"
+        "# 1. Enqueue tables\n\n"
+        "Hier stehen die Queue-Details.\n\n"
+        "# Accounts & workspaces\n\n"
+        "Hier stehen die Konten.\n",
+        encoding="utf-8",
+    )
+
+    out_pdf = tmp_path / "gitlab_test.pdf"
+    res = combine_markdown_to_pdf([f1], out_pdf, CombineOptions(title="GitLab Test"))
+    assert res.exists()
+    assert res.stat().st_size > 1000
+
+
+def test_combine_with_html_document(tmp_path: Path):
+    """Ensure HTML files are parsed and combined via Pandoc."""
+    html_file = tmp_path / "page.html"
+    html_file.write_text(
+        "<h1>Web Dokument</h1><p>Ein Absatz mit <strong>fettem Text</strong>.</p>",
+        encoding="utf-8",
+    )
+    out_pdf = tmp_path / "html_test.pdf"
+    res = combine_markdown_to_pdf(
+        [html_file], out_pdf, CombineOptions(title="HTML Test")
+    )
+    assert res.exists()
+    assert res.stat().st_size > 1000

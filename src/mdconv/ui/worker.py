@@ -57,7 +57,7 @@ class ConversionWorker(QObject):
             (self.out_dir or self.files[0].parent) / "Dokumentation.pdf"
         )
         self.log_message.emit(
-            f"Kombiniere {total} Markdown-Datei(en) in '{target_pdf.name}' (mit Inhaltsverzeichnis)...",
+            f"Kombiniere {total} Datei(en) in '{target_pdf.name}' (mit Inhaltsverzeichnis)...",
             "info",
         )
         self.progress_updated.emit(0, total)

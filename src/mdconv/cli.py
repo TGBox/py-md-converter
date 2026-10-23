@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-c",
         "--combine",
         action="store_true",
-        help="Mehrere Markdown-Dateien in ein großes PDF mit Inhaltsverzeichnis zusammenführen",
+        help="Mehrere Dokumentdateien (.md, .docx, .html, .xlsx, .csv, .pdf, .txt etc.) in ein großes PDF mit Inhaltsverzeichnis zusammenführen",
     )
     p.add_argument(
         "--title",
@@ -112,7 +112,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.combine:
         files = find_markdown_files(args.inputs, recursive=True)
         if not files:
-            print("Keine Markdown-Dateien zum Kombinieren gefunden.", file=sys.stderr)
+            print(
+                "Keine kompatiblen Dateien zum Kombinieren gefunden.", file=sys.stderr
+            )
             return 1
 
         title = args.title
@@ -143,9 +145,7 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             res_pdf = combine_markdown_to_pdf(files, target_out, combine_opt)
-            print(
-                f"OK      {len(files)} Markdown-Dateien erfolgreich kombiniert → {res_pdf}"
-            )
+            print(f"OK      {len(files)} Datei(en) erfolgreich kombiniert → {res_pdf}")
             return 0
         except (FileExistsError, ToolMissingError, ValueError, RuntimeError) as exc:
             print(f"FEHLER  Kombinieren fehlgeschlagen: {exc}", file=sys.stderr)
