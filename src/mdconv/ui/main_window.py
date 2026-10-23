@@ -38,6 +38,7 @@ from mdconv.combine import (
     find_combinable_files,
     is_combinable_file,
     natural_sort_key,
+    safe_filename,
 )
 from mdconv.engine import Options, collect_inputs, format_of
 from mdconv.ui.dialogs import (
@@ -556,7 +557,7 @@ class MainWindow(QMainWindow):
 
         if target_fmt == "pdf" and self.chk_combine_pdf.isChecked():
             # In combine mode, always search recursively through folder structures
-            combinable_files = find_combinable_files(paths, recursive=True)
+            combinable_files, _target = self._resolve_combine_inputs()
             count = len(combinable_files)
             if count == 0:
                 self.lbl_compatible_count.setText(
@@ -598,6 +599,42 @@ class MainWindow(QMainWindow):
 
     # ---------- Execution & Threading ----------
 
+    def _resolve_combine_inputs(self) -> tuple[list[Path], Path | None]:
+        """Collects the files to combine (in list order) and the target PDF path.
+
+        The target PDF itself is never part of the inputs, so a second run on the
+        same folder does not embed the previous result.
+        """
+        resolved: list[Path] = []
+        for p in self.file_table.get_paths():
+            if is_combinable_file(p):
+                found = [p.resolve()]
+            elif p.is_dir():
+                found = find_combinable_files([p], recursive=True)
+            else:
+                found = []
+            for f in found:
+                if f not in resolved:
+                    resolved.append(f)
+
+        if not resolved:
+            return [], None
+
+        doc_title = self.edit_combine_title.text().strip() or "Dokumentation"
+        file_name = f"{safe_filename(doc_title)}.pdf"
+        out_dir_text = self.edit_out_dir.text().strip()
+        if out_dir_text:
+            candidate = Path(out_dir_text)
+            if candidate.suffix.lower() == ".pdf":
+                target = candidate
+            else:
+                target = candidate / file_name
+        else:
+            target = resolved[0].parent / file_name
+
+        target = target.resolve()
+        return [f for f in resolved if f != target], target
+
     def _on_start_conversion(self) -> None:
         paths = self.file_table.get_paths()
         if not paths:
@@ -617,15 +654,7 @@ class MainWindow(QMainWindow):
         overwrite = self.chk_overwrite.isChecked()
 
         if is_combine:
-            resolved_files: list[Path] = []
-            for p in paths:
-                if is_combinable_file(p):
-                    if p not in resolved_files:
-                        resolved_files.append(p)
-                elif p.is_dir():
-                    for f in find_combinable_files([p], recursive=True):
-                        if f not in resolved_files:
-                            resolved_files.append(f)
+            resolved_files, target_pdf = self._resolve_combine_inputs()
 
             if not resolved_files:
                 msg = "Keine kompatiblen Dateien zum Kombinieren gefunden."
@@ -634,15 +663,6 @@ class MainWindow(QMainWindow):
                 return
 
             doc_title = self.edit_combine_title.text().strip() or "Dokumentation"
-            if out_dir_text:
-                candidate = Path(out_dir_text)
-                if candidate.suffix.lower() == ".pdf":
-                    target_pdf = candidate
-                else:
-                    target_pdf = candidate / f"{doc_title}.pdf"
-            else:
-                target_pdf = resolved_files[0].parent / f"{doc_title}.pdf"
-
             combine_options = CombineOptions(
                 title=doc_title,
                 toc=True,

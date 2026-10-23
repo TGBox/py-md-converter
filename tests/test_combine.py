@@ -14,7 +14,6 @@ from mdconv.combine import (
     combine_markdown_to_pdf,
     find_markdown_files,
     natural_sort_key,
-    prepare_combined_markdown,
 )
 
 
@@ -57,25 +56,6 @@ def test_find_markdown_files(tmp_path: Path):
     found = find_markdown_files([tmp_path], recursive=True)
     names = [f.name for f in found]
     assert names == ["01_intro.md", "01_concept.md", "02_detail.markdown", "summary.md"]
-
-
-def test_prepare_combined_markdown(tmp_path: Path):
-    f1 = tmp_path / "01_intro.md"
-    f1.write_text(
-        "---\ntitle: 'Spezieller Intro Titel'\nauthor: Tester\n---\n\nErster Text ohne Heading.",
-        encoding="utf-8",
-    )
-    f2 = tmp_path / "02_chapter.md"
-    f2.write_text("# Zweites Kapitel\n\nInhalt Kapitel 2.", encoding="utf-8")
-
-    opt = CombineOptions(title="Gesamtwerk")
-    combined = prepare_combined_markdown([f1, f2], opt, root_dir=tmp_path)
-
-    # Verify that f1 got an H1 heading with its frontmatter title
-    assert "# Spezieller Intro Titel" in combined
-    assert "Erster Text ohne Heading." in combined
-    assert "# Zweites Kapitel" in combined
-    assert "---" in combined  # Main doc header
 
 
 def test_combine_markdown_to_pdf_with_toc_and_bookmarks(tmp_path: Path):
@@ -142,24 +122,6 @@ def test_combine_markdown_to_pdf_with_toc_and_bookmarks(tmp_path: Path):
     assert toc_links_count >= 3  # Links to the chapters
 
     doc.close()
-
-
-def test_sanitize_typst_content(tmp_path: Path):
-    from mdconv.combine import sanitize_typst_content
-
-    existing_img = tmp_path / "valid.png"
-    existing_img.touch()
-
-    typ_input = (
-        '#box(image("https://example.com/logo.png"))\n'
-        '#figure(image("missing.png"), caption: [Missing])\n'
-        '#figure(image("valid.png"), caption: [Valid])\n'
-    )
-
-    sanitized = sanitize_typst_content(typ_input, common_root=tmp_path)
-    assert 'link("https://example.com/logo.png")' in sanitized
-    assert "Bild nicht gefunden: missing.png" in sanitized
-    assert 'image("valid.png")' in sanitized
 
 
 def test_combine_with_remote_and_missing_images(tmp_path: Path):

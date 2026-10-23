@@ -68,11 +68,21 @@ class ConversionWorker(QObject):
 
         try:
             combine_opt = self.combine_options or CombineOptions()
-            combine_markdown_to_pdf(self.files, target_pdf, combine_opt)
+            warnings: list[str] = []
+
+            def on_warning(message: str) -> None:
+                warnings.append(message)
+                self.log_message.emit(f"Hinweis: {message}", "warning")
+
+            combine_markdown_to_pdf(
+                self.files, target_pdf, combine_opt, on_warning=on_warning
+            )
             for f in self.files:
                 self.file_finished.emit(str(f), True, "Kombiniert ✓", [str(target_pdf)])
             self.progress_updated.emit(total, total)
             msg = f"Erfolgreich: {total} Dateien zusammengeführt → {target_pdf}"
+            if warnings:
+                msg += f" ({len(warnings)} Hinweis(e), siehe oben)"
             self.log_message.emit(msg, "success")
             self.finished.emit(total, 0, total)
         except Exception as exc:  # noqa: BLE001

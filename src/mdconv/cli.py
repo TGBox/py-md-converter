@@ -7,7 +7,12 @@ import sys
 from pathlib import Path
 
 from mdconv import __version__
-from mdconv.combine import CombineOptions, combine_markdown_to_pdf, find_markdown_files
+from mdconv.combine import (
+    CombineOptions,
+    combine_markdown_to_pdf,
+    find_markdown_files,
+    safe_filename,
+)
 from mdconv.engine import (
     ConversionError,
     Options,
@@ -128,10 +133,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.out:
             target_out = args.out.resolve()
             if target_out.is_dir() or target_out.suffix.lower() != ".pdf":
-                target_out = target_out / f"{title}.pdf"
+                target_out = target_out / f"{safe_filename(title)}.pdf"
         else:
             base_dir = files[0].parent
-            target_out = base_dir / f"{title}.pdf"
+            target_out = base_dir / f"{safe_filename(title)}.pdf"
 
         combine_opt = CombineOptions(
             title=title,
@@ -144,7 +149,12 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         try:
-            res_pdf = combine_markdown_to_pdf(files, target_out, combine_opt)
+            res_pdf = combine_markdown_to_pdf(
+                files,
+                target_out,
+                combine_opt,
+                on_warning=lambda msg: print(f"HINWEIS {msg}", file=sys.stderr),
+            )
             print(f"OK      {len(files)} Datei(en) erfolgreich kombiniert → {res_pdf}")
             return 0
         except (FileExistsError, ToolMissingError, ValueError, RuntimeError) as exc:
