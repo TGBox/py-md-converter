@@ -262,6 +262,11 @@ def clean_title_from_stem(stem: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _display_name(path: Path) -> str:
+    """Short but unambiguous name for messages, e.g. 'rechnung-svc/README.md'."""
+    return f"{path.parent.name}/{path.name}" if path.parent.name else path.name
+
+
 def _read_text(path: Path) -> str:
     """Reads a text file as UTF-8, falling back to Windows-1252 for legacy files."""
     data = path.read_bytes()
@@ -581,7 +586,9 @@ def _read_markdown(path: Path, build: _Build) -> tuple[list[Node], str | None]:
         match = _FRONTMATTER_PATTERN.match(text)
         if match:
             text = text[match.end() :]
-        build.warn(f"{path.name}: Kopfdaten (YAML) fehlerhaft – wurden ignoriert.")
+        build.warn(
+            f"{_display_name(path)}: Kopfdaten (YAML) fehlerhaft – wurden ignoriert."
+        )
         return build.markdown_blocks(text), None
     title = _stringify(meta.get("title")) or None
     return blocks, title
@@ -634,7 +641,7 @@ def _read_pdf(path: Path, build: _Build) -> list[Node]:
         pass
     except Exception as exc:  # noqa: BLE001 - Docling can raise anything; embed pages instead
         build.warn(
-            f"{path.name}: Texterkennung fehlgeschlagen ({exc}) – Seiten werden als Bild eingebettet."
+            f"{_display_name(path)}: Texterkennung fehlgeschlagen ({exc}) – Seiten werden als Bild eingebettet."
         )
 
     rel = build.asset(path)
@@ -781,6 +788,10 @@ def _assign_ids(chapter: _Chapter) -> None:
         chapter.ids.setdefault(original, new)
         chapter.norm_ids.setdefault(_normalize_anchor(original), new)
 
+    # The chapter anchor (target of links to this file) must be read *after* prefixing.
+    first_header = next((b for b in chapter.blocks if b.get("t") == "Header"), None)
+    chapter.anchor = first_header["c"][1][0] if first_header is not None else ""
+
 
 def _ensure_chapter_heading(
     chapter: _Chapter, meta_title: str | None, options: CombineOptions
@@ -790,11 +801,8 @@ def _ensure_chapter_heading(
         title = meta_title or clean_title_from_stem(chapter.source.stem)
         chapter.blocks.insert(0, _header(1, title))
     first_header = next((b for b in chapter.blocks if b.get("t") == "Header"), None)
-    if first_header is not None:
-        attr = first_header["c"][1]
-        if not attr[0]:
-            attr[0] = f"f{chapter.index}-file"
-        chapter.anchor = attr[0]
+    if first_header is not None and not first_header["c"][1][0]:
+        first_header["c"][1][0] = "file"  # gets the chapter prefix in _assign_ids
 
 
 def _resolve_links(chapters: list[_Chapter]) -> None:
@@ -992,7 +1000,7 @@ def combine_markdown_to_pdf(
             except Exception as exc:  # noqa: BLE001 - one bad file must not stop the rest
                 reason = _first_error_line(str(exc))
                 warn(
-                    f"{path.name}: konnte nicht gelesen werden ({reason}) – als Rohtext übernommen."
+                    f"{_display_name(path)}: konnte nicht gelesen werden ({reason}) – als Rohtext übernommen."
                 )
                 chapter.blocks = _fallback_blocks(path, reason)
             _ensure_chapter_heading(chapter, meta_title, opt)
@@ -1056,7 +1064,7 @@ def combine_markdown_to_pdf(
                 chapter = chapters[bad - 1]
                 reason = _first_error_line(error)
                 warn(
-                    f"{chapter.source.name}: Typst-Fehler ({reason}) – Datei als Rohtext übernommen."
+                    f"{_display_name(chapter.source)}: Typst-Fehler ({reason}) – Datei als Rohtext übernommen."
                 )
                 title = clean_title_from_stem(chapter.source.stem)
                 heading = next(

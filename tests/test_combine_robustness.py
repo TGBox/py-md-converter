@@ -295,3 +295,36 @@ def test_source_folder_stays_clean(tmp_path: Path):
     out_dir.mkdir()
     combine_markdown_to_pdf([f], out_dir / "x.pdf", CombineOptions())
     assert sorted(p.name for p in tmp_path.iterdir()) == ["a.md", "out"]
+
+
+def test_link_to_other_file_without_anchor(tmp_path: Path):
+    """Regression: links like [x](../svc/README.md) pointed at an unprefixed label."""
+    (tmp_path / "svc").mkdir()
+    (tmp_path / "app").mkdir()
+    (tmp_path / "svc" / "README.md").write_text(
+        "# rechnung-svc\n\nDienst.\n", encoding="utf-8"
+    )
+    (tmp_path / "app" / "README.md").write_text(
+        "# App\n\nNutzt [rechnung-svc](../svc/README.md).\n", encoding="utf-8"
+    )
+    (tmp_path / "plain.txt").write_text("ohne Überschrift\n", encoding="utf-8")
+    (tmp_path / "links.md").write_text(
+        "# Links\n\n[Text](plain.txt)\n", encoding="utf-8"
+    )
+    files = [
+        tmp_path / "svc" / "README.md",
+        tmp_path / "app" / "README.md",
+        tmp_path / "plain.txt",
+        tmp_path / "links.md",
+    ]
+    _, warnings, text = combine(files, tmp_path)
+    assert not warnings
+    assert "Nutzt rechnung-svc." in " ".join(text.split())
+
+
+def test_warnings_name_the_folder(tmp_path: Path):
+    (tmp_path / "projekt-a").mkdir()
+    bad = tmp_path / "projekt-a" / "README.md"
+    bad.write_text("# A\n\n```{=typst}\n#undefined-function()\n```\n", encoding="utf-8")
+    _, warnings, _ = combine([bad], tmp_path)
+    assert warnings and warnings[0].startswith("projekt-a/README.md:")
