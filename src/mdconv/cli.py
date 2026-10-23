@@ -110,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Combine-Modus: Mehrere Markdown-Dateien in ein PDF mit Inhaltsverzeichnis
     if args.combine:
-        files = find_markdown_files(args.inputs, args.recursive)
+        files = find_markdown_files(args.inputs, recursive=True)
         if not files:
             print("Keine Markdown-Dateien zum Kombinieren gefunden.", file=sys.stderr)
             return 1

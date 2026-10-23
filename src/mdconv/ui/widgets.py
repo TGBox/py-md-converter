@@ -122,7 +122,14 @@ class FileTableWidget(QTableWidget):
 
         if resolved.is_dir():
             fmt_str = "Ordner"
-            size_str = "-"
+            try:
+                child_count = sum(1 for f in resolved.rglob("*") if f.is_file())
+                size_str = f"{child_count} Datei(en)"
+                name_item.setToolTip(
+                    f"{resolved}\n({child_count} Dateien in Unterordnern)"
+                )
+            except OSError:
+                size_str = "-"
         else:
             fmt = format_of(resolved)
             fmt_str = fmt.upper() if fmt else (resolved.suffix or "-")

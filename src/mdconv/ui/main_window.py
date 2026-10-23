@@ -33,8 +33,8 @@ from PySide6.QtWidgets import (
 )
 
 from mdconv import __version__
-from mdconv.combine import CombineOptions, find_markdown_files
-from mdconv.engine import Options, collect_inputs
+from mdconv.combine import CombineOptions, find_markdown_files, natural_sort_key
+from mdconv.engine import Options, collect_inputs, format_of
 from mdconv.ui.dialogs import (
     AboutDialog,
     FormatsDialog,
@@ -264,9 +264,12 @@ class MainWindow(QMainWindow):
 
         row4.addSpacing(20)
         self.chk_recursive = QCheckBox("Unterordner rekursiv durchsuchen")
+        self.chk_recursive.setChecked(True)
+        self.chk_recursive.toggled.connect(self._on_recursive_toggled)
         row4.addWidget(self.chk_recursive)
 
         self.chk_overwrite = QCheckBox("Vorhandene Dateien überschreiben")
+        self.chk_overwrite.toggled.connect(self._update_compatible_count)
         row4.addWidget(self.chk_overwrite)
 
         row4.addStretch()
@@ -438,13 +441,42 @@ class MainWindow(QMainWindow):
         if folder:
             self._add_paths([Path(folder)])
 
+    def _on_recursive_toggled(self, checked: bool) -> None:
+        self._update_compatible_count()
+
     def _add_paths(self, paths: list[Path]) -> None:
         added_count = 0
-        for p in paths:
-            if self.file_table.add_path(p):
-                added_count += 1
+        for raw in paths:
+            p = Path(raw).resolve()
+            if p.is_dir():
+                # Always recursively discover all supported files in the folder and its subdirectories
+                folder_files = [
+                    f.resolve()
+                    for f in p.rglob("*")
+                    if f.is_file() and format_of(f) is not None
+                ]
+                folder_files.sort(key=natural_sort_key)
+                if folder_files:
+                    for f in folder_files:
+                        if self.file_table.add_path(f):
+                            added_count += 1
+                    self.log_widget.append_message(
+                        f"Ordner '{p.name}' durchsucht: {len(folder_files)} Datei(en) in Unterverzeichnissen geladen.",
+                        "info",
+                    )
+                else:
+                    if self.file_table.add_path(p):
+                        added_count += 1
+                    self.log_widget.append_message(
+                        f"Ordner '{p.name}' hinzugefügt (keine passenden Dateien gefunden).",
+                        "warning",
+                    )
+            else:
+                if self.file_table.add_path(p):
+                    added_count += 1
+
         total = self.file_table.rowCount()
-        self.lbl_file_count.setText(f"{total} Datei(en)/Ordner geladen")
+        self.lbl_file_count.setText(f"{total} Datei(en) geladen")
         self._update_compatible_count()
         if added_count > 0:
             self.log_widget.append_message(
@@ -517,8 +549,8 @@ class MainWindow(QMainWindow):
             return
 
         if target_fmt == "pdf" and self.chk_combine_pdf.isChecked():
-            recursive = self.chk_recursive.isChecked()
-            md_files = find_markdown_files(paths, recursive=recursive)
+            # In combine mode, always search recursively through folder structures
+            md_files = find_markdown_files(paths, recursive=True)
             count = len(md_files)
             if count == 0:
                 self.lbl_compatible_count.setText(
@@ -580,7 +612,7 @@ class MainWindow(QMainWindow):
                     if p not in resolved_files:
                         resolved_files.append(p)
                 elif p.is_dir():
-                    for f in find_markdown_files([p], recursive=recursive):
+                    for f in find_markdown_files([p], recursive=True):
                         if f not in resolved_files:
                             resolved_files.append(f)
 
@@ -774,9 +806,7 @@ class MainWindow(QMainWindow):
         if idx >= 0:
             self.combo_target.setCurrentIndex(idx)
 
-        self.chk_recursive.setChecked(
-            self.settings.value("recursive", False, type=bool)
-        )
+        self.chk_recursive.setChecked(self.settings.value("recursive", True, type=bool))
         self.chk_overwrite.setChecked(
             self.settings.value("overwrite", False, type=bool)
         )

@@ -225,3 +225,31 @@ def test_worker_combine_mode(qapp, tmp_path):
     assert len(finished_called) == 1
     assert finished_called[0] == (2, 0, 2)
     assert out_pdf.exists()
+
+
+def test_main_window_nested_folder_discovery(qapp, tmp_path):
+    # Setup nested folder hierarchy
+    root_folder = tmp_path / "project_docs"
+    root_folder.mkdir()
+    (root_folder / "01_kapitel").mkdir()
+    (root_folder / "01_kapitel" / "intro.md").write_text("# Intro", encoding="utf-8")
+    (root_folder / "02_kapitel" / "sub" / "deep").mkdir(parents=True)
+    (root_folder / "02_kapitel" / "sub" / "deep" / "details.md").write_text(
+        "# Details", encoding="utf-8"
+    )
+
+    win = MainWindow()
+    # Add root folder
+    win._add_paths([root_folder])
+
+    # Verify that all nested files are directly discovered and listed
+    assert win.file_table.rowCount() == 2
+    names = [win.file_table.item(r, 0).text() for r in range(win.file_table.rowCount())]
+    assert names == ["intro.md", "details.md"]
+
+    # Verify combine mode status
+    win.combo_target.setCurrentIndex(win.combo_target.findData("pdf"))
+    win.chk_combine_pdf.setChecked(True)
+    assert "✓ 2 Markdown-Datei(en) werden kombiniert" in win.lbl_compatible_count.text()
+
+    win.close()
