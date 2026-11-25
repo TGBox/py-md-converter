@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QThread
@@ -11,6 +12,7 @@ from PySide6.QtGui import (
     QAction,
     QDragEnterEvent,
     QDropEvent,
+    QIcon,
     QKeySequence,
 )
 from PySide6.QtWidgets import (
@@ -62,12 +64,23 @@ DELIMITER_OPTIONS = {
 }
 
 
+def _app_icon_path() -> Path:
+    """Returns the path to the application icon in both dev and PyInstaller builds."""
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return Path(base) / "assets" / "MarkMyWords.ico"
+    return Path(__file__).resolve().parents[3] / "assets" / "MarkMyWords.ico"
+
+
 class MainWindow(QMainWindow):
     """The central application window for py-md-converter."""
 
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(f"py-md-converter v{__version__}")
+        icon_path = _app_icon_path()
+        if icon_path.is_file():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.setMinimumSize(850, 680)
         self.setAcceptDrops(True)
 
@@ -894,11 +907,21 @@ class MainWindow(QMainWindow):
 
 def main() -> None:
     """Direct entry point for launching MainWindow."""
-    import sys
+    if os.name == "nt":
+        import contextlib
+        import ctypes
+
+        with contextlib.suppress(AttributeError, OSError):
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "Data-AL.MarkMyWords"
+            )
 
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("py-md-converter")
     app.setOrganizationName("Data-AL")
+    icon_path = _app_icon_path()
+    if icon_path.is_file():
+        app.setWindowIcon(QIcon(str(icon_path)))
     window = MainWindow()
     window.show()
     sys.exit(app.exec())

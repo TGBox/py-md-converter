@@ -122,6 +122,7 @@ def test_worker_cancellation(qapp, tmp_path):
 def test_main_window_lifecycle(qapp, tmp_path):
     win = MainWindow()
     assert "py-md-converter" in win.windowTitle()
+    assert not win.windowIcon().isNull()
 
     # Test file addition
     sample_file = tmp_path / "sample.md"
