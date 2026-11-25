@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 
 from mdconv.cli import main as cli
 from mdconv.engine import ConversionError, Options, collect_inputs, convert
+from mdconv.tools import ToolMissingError, find_tool
 
 SAMPLE = """# Bericht
 
@@ -29,6 +30,17 @@ needs_pandoc = pytest.mark.skipif(
     not (shutil.which("pandoc") or importlib.util.find_spec("pypandoc")),
     reason="pandoc nicht verfügbar",
 )
+
+
+def _has_typst() -> bool:
+    try:
+        find_tool("typst")
+        return True
+    except ToolMissingError:
+        return False
+
+
+needs_typst = pytest.mark.skipif(not _has_typst(), reason="typst nicht verfügbar")
 
 
 @pytest.fixture
@@ -109,6 +121,41 @@ def test_md_html_roundtrip(md, tmp_path):
     assert "<table" in html.read_text(encoding="utf-8")
     [back] = convert(html, "md", tmp_path / "back")
     assert "Support" in back.read_text(encoding="utf-8")
+
+
+@needs_pandoc
+@needs_typst
+def test_md_to_pdf_keeps_at_mentions_without_bibliography(tmp_path):
+    from PySide6.QtPdf import QPdfDocument
+
+    src = tmp_path / "leitfaden.md"
+    src.write_text(
+        "# Leitfaden\n\nNov 25, 2026 · @Daniel Rösch\n\nPaket [@data-al/design-system]\n",
+        encoding="utf-8",
+    )
+    [pdf] = convert(src, "pdf", tmp_path / "out")
+    assert pdf.exists()
+    assert pdf.stat().st_size > 0
+
+    doc = QPdfDocument()
+    doc.load(str(pdf))
+    try:
+        text = "\n".join(doc.getAllText(i).text() for i in range(doc.pageCount()))
+    finally:
+        doc.close()
+
+    assert "@Daniel" in text
+    assert "@data-al/design-system" in text
+
+
+@needs_pandoc
+def test_md_to_html_keeps_at_mentions_as_plain_text(tmp_path):
+    src = tmp_path / "mentions.md"
+    src.write_text("Nov 25, 2026 · @Daniel Rösch\n", encoding="utf-8")
+    [html] = convert(src, "html", tmp_path / "out")
+    content = html.read_text(encoding="utf-8")
+    assert "@Daniel" in content
+    assert 'class="citation"' not in content
 
 
 @pytest.mark.skipif(

@@ -68,6 +68,10 @@ def format_of(path: Path) -> str | None:
 
 # ---------- Pandoc ----------
 
+# Disable Pandoc citations so @mentions (e.g. "@Daniel") are kept as plain text
+# instead of generating #cite(...) calls that fail in Typst without a bibliography.
+_MD_INPUT_FORMAT = "markdown-citations"
+
 
 def _pandoc(*args: str, cwd: Path | None = None) -> None:
     run([find_tool("pandoc"), *args], cwd=cwd)
@@ -75,7 +79,14 @@ def _pandoc(*args: str, cwd: Path | None = None) -> None:
 
 @_register("md", "docx")
 def _md_to_docx(src: Path, out: Path, opt: Options) -> list[Path]:
-    args = [str(src), "-o", str(out), f"--resource-path={src.parent}"]
+    args = [
+        str(src),
+        "-f",
+        _MD_INPUT_FORMAT,
+        "-o",
+        str(out),
+        f"--resource-path={src.parent}",
+    ]
     if opt.reference_doc:
         args.append(f"--reference-doc={opt.reference_doc}")
     _pandoc(*args)
@@ -86,6 +97,8 @@ def _md_to_docx(src: Path, out: Path, opt: Options) -> list[Path]:
 def _md_to_html(src: Path, out: Path, opt: Options) -> list[Path]:
     _pandoc(
         str(src),
+        "-f",
+        _MD_INPUT_FORMAT,
         "-o",
         str(out),
         "-s",
@@ -100,6 +113,8 @@ def _md_to_html(src: Path, out: Path, opt: Options) -> list[Path]:
 def _md_to_pdf(src: Path, out: Path, opt: Options) -> list[Path]:
     _pandoc(
         str(src),
+        "-f",
+        _MD_INPUT_FORMAT,
         "-o",
         str(out),
         f"--pdf-engine={find_tool('typst')}",
